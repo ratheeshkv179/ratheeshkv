@@ -252,9 +252,9 @@ func client(conn net.Conn){
 	//fmt.Print("\nFile Content :",string(contents))
 	
 	if (exp_sec[string(part[1])] == -1){
-	fmt.Fprintf(conn,"CONTENTS %v %v\r\n%v\r\n",version[part[1]],len(contents),contents)	
+	fmt.Fprintf(conn,"CONTENTS %v %v\r\n%v\r\n",version[part[1]],len(contents),string(contents))	
 	}else {
-	fmt.Fprintf(conn,"CONTENTS %v %v %v\r\n%v\r\n",version[part[1]],len(contents),exp_sec[string(part[1])],contents)	
+	fmt.Fprintf(conn,"CONTENTS %v %v %v\r\n%v\r\n",version[part[1]],len(contents),exp_sec[string(part[1])],string(contents))	
 	}}
 	} else {
 	fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
