@@ -42,18 +42,5 @@ Following are successfully tested while the server is continuously running
 2) Read From file
 3) Delete a file
 4) Compare and swap a file
-5) Expiry time are successfully working
 5) Version management is successfull
 
-Present Problems
---------------------
-1) While restarting the files are successfully read from LevelDB, but 
-the version number, expiry times are lost(since they are not stored 
-permanently)...So execute the commands while the server is running.
-
-2) Concurrency part is not completely successful, still working on that, require
-little more time
-
-3) More testcases will be added, still working on that. 
-
-    

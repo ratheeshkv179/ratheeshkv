@@ -4,7 +4,7 @@ package main
 
 import ( 
 	"fmt"
-	"sync"
+//	"sync"
 	"net"
 	"strings"
 	"bufio"
@@ -15,39 +15,116 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"   
 	)
  
-var mutex = &sync.Mutex{}
-var file_version uint64 = 0
-var version = make(map [string] uint64)
-var expiry = make(map [string] int64)
-var exp_sec = make(map [string] int64)
+//var mutex = &sync.mutex{}
 
-var db, err = leveldb.OpenFile("/tmp/files.db", nil)
+ 
+var db, _ = leveldb.OpenFile("/tmp/file_content.db", nil)
+var db_ver, _ = leveldb.OpenFile("/tmp/version.db", nil)
+var db_fver, _ = leveldb.OpenFile("/tmp/file_version.db", nil)
+var db_expiry, _ = leveldb.OpenFile("/tmp/file_expiry.db", nil)
+var db_exp_sec, _ = leveldb.OpenFile("/tmp/file_exp_sec.db", nil)
+
 	
 func serverMain(){
 
 	ip_address, err := net.ResolveTCPAddr("tcp4","localhost:8080")
 	if err!=nil {
-	//fmt.Print("\nError : ",err)
-//	os.Exit(1)
 	} else {
-	//fmt.Print("\nServer started, Listening on port :8080")
-	go checkexpiry()
-	
 	listen, _  := net.ListenTCP("tcp", ip_address)
-
-	
 	for {
 	conn, err := listen.Accept()
 	if( err!=nil){
-	//fmt.Print("\nError : ",err)
-//	os.Exit(1)
 	} else {
 	go client(conn)
-
 	}}}
 }
 
 
+func incVersion() (int64){
+        
+        var version int64 = 0
+        data,err:= db_ver.Get([]byte("version"), nil)
+        if(err != nil) {
+        version = 1
+        _ = db_ver.Put([]byte("version"), []byte(strconv.FormatInt(version, 10)), nil)
+        } else {
+        version, _ = strconv.ParseInt(string(data), 10, 64)    
+        version = version + 1
+        _ = db_ver.Put([]byte("version"), []byte(strconv.FormatInt(version, 10)), nil)
+        }
+        return version
+}
+
+
+func getVersion(fname string) (int64) {
+        
+        data,err:= db_fver.Get([]byte(fname), nil)
+        if(err != nil) {
+                return -1
+        } else {
+        version, _ := strconv.ParseInt(string(data), 10, 64)    
+        return version        
+        }
+}
+
+func setVersion(  fname string) {
+
+        ver := incVersion()
+        err := db_fver.Put([]byte(fname), []byte(strconv.FormatInt(ver, 10)), nil)
+        if(err !=nil) {
+        }  
+}
+
+func setExpiry(  fname string,   exp int64 ) {
+
+        
+        exp = exp + time.Now().Unix()
+        err := db_expiry.Put([]byte(fname), []byte(strconv.FormatInt(exp, 10)), nil)
+        if(err != nil) {
+        }
+}
+
+func getExpiry(  fname string) (int64){
+
+          data, err := db_expiry.Get([]byte(fname), nil)
+          if (err != nil) {
+          return -1
+          } else {
+          exp, err := strconv.ParseInt(string(data), 10, 64)        
+          
+               if(err !=nil) {
+               return -1
+               } else {
+               return exp
+               }
+          }
+}
+
+func setExpirySec(  fname string,   exp int64) {
+
+        setExpiry(fname,exp)
+        err := db_exp_sec.Put([]byte(fname), []byte(strconv.FormatInt(exp, 10)), nil)
+        if(err != nil) {
+        }
+}
+
+func getExpirySec(  fname string) (int64) {
+
+          data, err := db_exp_sec.Get([]byte(fname), nil)
+          if (err != nil) {
+          return -1
+          } else {
+          exp, err := strconv.ParseInt(string(data), 10, 64)        
+          
+               if(err !=nil) {
+               return -1
+               } else {
+               return exp
+               }
+          }
+}
+ 
+/*
 func checkexpiry(){
 
         for true {
@@ -56,18 +133,23 @@ func checkexpiry(){
         cur_time  := time.Now().Unix()
         if(exp_sec[k] != -1 && exp_sec[k]!=0) {
         if (expiry[k]<=cur_time) {
-        delete(expiry,k)
-        delete(exp_sec,k)
-        delete(version,k)
-        err = db.Delete([]byte(k), nil)
+        
+//        delete(expiry,k)
+//        delete(exp_sec,k)
+//        delete(version,k)
+
+        _ = db_exp_sec.Delete([]byte(k), nil)
+        _ = db_expiry.Delete([]byte(k), nil)
+        _ = db_ver.Delete([]byte("version"), nil)
+        _ = db.Delete([]byte(k), nil)
+        
         }}
     }}
-}
+}*/
 
 
 func client(conn net.Conn){
 
-	//fmt.Println("\nClient connected, connection ID :",conn)
  
        	reader := bufio.NewReader(conn)
         		
@@ -76,20 +158,14 @@ func client(conn net.Conn){
 	data, err := reader.ReadBytes('\n')
 
 	if(err== io.EOF) {
-	//conn.Close()
-	//fmt.Print("conn closed")
 	break
 	} else	if (err!=nil){
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	
 	} else {
 	
-	//fmt.Println("\nNo of Bytes read : ",data)	
-	//fmt.Println("\nNo of Bytes read1 : ",err)	
 
 	if(data[len(data)-2]!='\r') {
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 	command := string(data[0:len(data)-2])
@@ -101,9 +177,7 @@ func client(conn net.Conn){
 
 	if(len(part)==3 ||len(part)==4){
 	numbytes,err := strconv.Atoi(part[2])
-	//fmt.Print(numbytes)		
 	if(err != nil ) { // number of bytes in not a number
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 
@@ -112,10 +186,8 @@ func client(conn net.Conn){
 
 	if(len(part)==4){            // Expiry time present
 	expiry_time,err = strconv.Atoi(part[3])
-	//fmt.Print(expiry_time)		
 	if(err != nil ) { // number of bytes in not number
 	flag = 1
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	}}
 	
@@ -128,32 +200,29 @@ func client(conn net.Conn){
 	data, err = reader.ReadBytes('\n')
 	}
 	content = append(content,data[:len(data)-2]...)
-	//content = bytes.Trim(content," ")
-	//fmt.Print("\n",len(content),content,numbytes,"#")
 	if(len(content)!=numbytes) {
-	//fmt.Print("\nError : nmbytes mismatch")
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {	
-//	_, err = file.Write(content)
-//        err = db.Put([]byte("key"), []byte("novalue"), nil)
         err = db.Put([]byte(string(part[1])), []byte(content), nil)
         	
 	if (err!=nil) {
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 	
-        mutex.Lock()
-	file_version  ++
-	version[part[1]] =  file_version // Update file entry
-	fmt.Fprintf(conn,"OK %v\r\n",version[part[1]])	
+        //mutex.Lock()
+        
+        setVersion(string(part[1]))
+        fmt.Fprintf(conn,"OK %v\r\n",getVersion(string(part[1])))	              
+        
+        
+	
+	
 	if (len(part)==4) {
-	exp_sec[part[1]] = int64(expiry_time)
-        expiry[part[1]] = int64(expiry_time) + time.Now().Unix()
+	setExpirySec(string(part[1]),int64(expiry_time))
         } else {
-        exp_sec[part[1]] = -1
+        	setExpirySec(string(part[1]),int64(-1))
         }
-        mutex.Unlock()
+        //mutex.Unlock()
         }
 	content = nil
         }}}
@@ -161,29 +230,22 @@ func client(conn net.Conn){
         fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
         }
         
-        
-        
-        
         }  else if ((strings.Compare(part[0],"cas"))==0) {
 
 	if((len(part)==4 ||len(part)==5) && (len(part[1])<=256)){
       	_, err := db.Get([]byte(string(part[1])), nil)
 	if(err != nil){
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_FILE_NOT_FOUND\r\n")	
 	} else {
 	versn,err := strconv.Atoi(part[2])
 	if(err != nil ) { // version in not a number
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 	numbytes,err := strconv.Atoi(part[3])
 	if(err != nil ) { // number of bytes in not a number
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
-	if(version[part[1]] != uint64(versn)) {
-	//fmt.Print("\nError : version mismatch ")
+	if(getVersion(string(part[1])) != int64(versn)) {
 	fmt.Fprintf(conn,"ERR_VERSION\r\n")
 	} else {
 	flag := 0
@@ -191,7 +253,6 @@ func client(conn net.Conn){
 	if(len(part)==5) {
 	exp,err = strconv.Atoi(part[4])
 	if(err != nil ) { // number of bytes in not a number
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	flag = 1
 	}}
@@ -203,31 +264,31 @@ func client(conn net.Conn){
 	data, err = reader.ReadBytes('\n')
 	}
 	content = append(content,data[:len(data)-2]...)
-	//content = bytes.Trim(content," ")
-        //fmt.Print("\n",len(content),numbytes,"#")
         
 	if(len(content)!=numbytes) {
-	//fmt.Print("\nError : size mismatch")
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 	//delete
         err = db.Put([]byte(string(part[1])), []byte(content), nil)
 	if (err!=nil) {
-	//fmt.Print("\nError : ",err)
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 	
-        mutex.Lock()
+        //mutex.Lock()
 	if (len(part)==4) {
-        exp_sec[part[1]]	= -1
+	setExpirySec(string(part[1]),int64(-1))
+//        exp_sec[part[1]]	= -1
 	} else {
-	exp_sec[part[1]] = int64(exp)
-        expiry[part[1]]	=  int64(exp) + time.Now().Unix()
+	setExpirySec(string(part[1]),int64(exp))
+//	exp_sec[part[1]] = int64(exp)
+//        expiry[part[1]]	=  int64(exp) + time.Now().Unix()
 	}
-	file_version  ++
-	version[part[1]] =  file_version // Update file entry
-        fmt.Fprintf(conn,"OK %v\r\n",file_version)	
-        mutex.Unlock()
+	
+	setVersion(string(part[1]))
+        fmt.Fprintf(conn,"OK %v\r\n",getVersion(string(part[1])))	              
+        
+        
+        //mutex.Unlock()
         
 	}
 	content = nil
@@ -236,47 +297,50 @@ func client(conn net.Conn){
 	} else {
 	fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
 	}
- 
+	
+	
 	} else if ((strings.Compare(part[0],"read"))==0) {
+	
+	
 	if(len(part)==2 && len(part[1])<=256){
 
-        mutex.Lock()
+//        //mutex.Lock()
         contents, err := db.Get([]byte(string(part[1])), nil)
-        mutex.Unlock()
+//        //mutex.Unlock()
         
-	//fmt.Print("\nFile Name : ",len(string(part[1])))
+	////fmt.Print("\nFile Name : ",len(string(part[1])))
 	if(err !=nil) {
 	
 	fmt.Fprintf(conn,"ERR_FILE_NOT_FOUND\r\n")
 	}else {
-	//fmt.Print("\nFile Content :",string(contents))
-	
-	if (exp_sec[string(part[1])] == -1){
-	fmt.Fprintf(conn,"CONTENTS %v %v\r\n%v\r\n",version[part[1]],len(contents),string(contents))	
+	////fmt.Print("\nFile Content :",string(contents))
+//	if (exp_sec[string(part[1])] == -1)
+        if (getExpirySec(string(part[1])) == -1){
+	fmt.Fprintf(conn,"CONTENTS %v %v\r\n%v\r\n",getVersion(string(part[1])),len(contents),string(contents))	
 	}else {
-	fmt.Fprintf(conn,"CONTENTS %v %v %v\r\n%v\r\n",version[part[1]],len(contents),exp_sec[string(part[1])],string(contents))	
+	fmt.Fprintf(conn,"CONTENTS %v %v %v\r\n%v\r\n",getVersion(string(part[1])),len(contents),getExpirySec(string(part[1])),string(contents))	
 	}}
 	} else {
 	fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
 	}
-
+	
 	} else if ((strings.Compare(part[0],"delete"))==0) {
-
-	//fmt.Print("\nDELETE")
+	////fmt.Print("\nDELETE")
 	if(len(part)==2 && len(part[1])<=256){
-	
-        mutex.Lock()
-	
+        //mutex.Lock()
         err = db.Delete([]byte(string(part[1])), nil)
-        //fmt.Print("\nError : ",err)        
 	if(err != nil) {
 	fmt.Fprintf(conn,"ERR_FILE_NOT_FOUND\r\n")
 	} else {
-	delete (version, part[1])
-	delete (expiry,  part[1])
+        db_fver.Delete([]byte(string(part[1])), nil)
+        db_expiry.Delete([]byte(string(part[1])), nil)
+        db_exp_sec.Delete([]byte(string(part[1])), nil)
 	fmt.Fprintf(conn,"OK\r\n")
 	}
-        mutex.Unlock()
+        //mutex.Unlock()
+        
+        
+        
 	} else {
 	fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
 	}
@@ -288,6 +352,10 @@ func client(conn net.Conn){
 
 func main(){
         defer db.Close()
+        defer db_ver.Close()
+        defer db_fver.Close()
+        defer db_expiry.Close()
+        defer db_exp_sec.Close()
 	serverMain()
 }
 
