@@ -4,7 +4,7 @@ package main
 
 import ( 
 	"fmt"
-//	"sync"
+	"sync"
 	"net"
 	"strings"
 	"bufio"
@@ -15,7 +15,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"   
 	)
  
-//var mutex = &sync.mutex{}
+var mutex = &sync.Mutex{}
 
  
 var db, _ = leveldb.OpenFile("/tmp/file_content.db", nil)
@@ -41,7 +41,7 @@ func serverMain(){
 
 
 func incVersion() (int64){
-        
+        mutex.Lock()
         var version int64 = 0
         data,err:= db_ver.Get([]byte("version"), nil)
         if(err != nil) {
@@ -52,7 +52,8 @@ func incVersion() (int64){
         version = version + 1
         _ = db_ver.Put([]byte("version"), []byte(strconv.FormatInt(version, 10)), nil)
         }
-        return version
+        mutex.Unlock()
+        //return version
 }
 
 
@@ -68,8 +69,9 @@ func getVersion(fname string) (int64) {
 }
 
 func setVersion(  fname string) {
-
         ver := incVersion()
+        
+        
         err := db_fver.Put([]byte(fname), []byte(strconv.FormatInt(ver, 10)), nil)
         if(err !=nil) {
         }  
@@ -77,7 +79,6 @@ func setVersion(  fname string) {
 
 func setExpiry(  fname string,   exp int64 ) {
 
-        
         exp = exp + time.Now().Unix()
         err := db_expiry.Put([]byte(fname), []byte(strconv.FormatInt(exp, 10)), nil)
         if(err != nil) {
@@ -126,7 +127,6 @@ func getExpirySec(  fname string) (int64) {
  
 /*
 func checkexpiry(){
-
         for true {
         time.Sleep(1000000000)
         for k := range expiry {
@@ -137,7 +137,6 @@ func checkexpiry(){
 //        delete(expiry,k)
 //        delete(exp_sec,k)
 //        delete(version,k)
-
         _ = db_exp_sec.Delete([]byte(k), nil)
         _ = db_expiry.Delete([]byte(k), nil)
         _ = db_ver.Delete([]byte("version"), nil)
@@ -202,14 +201,16 @@ func client(conn net.Conn){
 	content = append(content,data[:len(data)-2]...)
 	if(len(content)!=numbytes) {
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
-	} else {	
+	} else {
+	
+        mutex.Lock()		
         err = db.Put([]byte(string(part[1])), []byte(content), nil)
         	
 	if (err!=nil) {
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
 	
-        //mutex.Lock()
+        
         
         setVersion(string(part[1]))
         fmt.Fprintf(conn,"OK %v\r\n",getVersion(string(part[1])))	              
@@ -224,6 +225,7 @@ func client(conn net.Conn){
         }
         //mutex.Unlock()
         }
+        mutex.Unlock()		
 	content = nil
         }}}
         } else {
@@ -268,6 +270,8 @@ func client(conn net.Conn){
 	if(len(content)!=numbytes) {
 	fmt.Fprintf(conn,"ERR_INTERNAL\r\n")
 	} else {
+	
+	mutex.Lock()
 	//delete
         err = db.Put([]byte(string(part[1])), []byte(content), nil)
 	if (err!=nil) {
@@ -288,9 +292,8 @@ func client(conn net.Conn){
         fmt.Fprintf(conn,"OK %v\r\n",getVersion(string(part[1])))	              
         
         
-        //mutex.Unlock()
-        
 	}
+	mutex.Unlock()
 	content = nil
 	//file.Close()
 	}}}}}}
@@ -304,7 +307,7 @@ func client(conn net.Conn){
 	
 	if(len(part)==2 && len(part[1])<=256){
 
-//        //mutex.Lock()
+        mutex.Lock()
         contents, err := db.Get([]byte(string(part[1])), nil)
 //        //mutex.Unlock()
         
@@ -320,6 +323,8 @@ func client(conn net.Conn){
 	}else {
 	fmt.Fprintf(conn,"CONTENTS %v %v %v\r\n%v\r\n",getVersion(string(part[1])),len(contents),getExpirySec(string(part[1])),string(contents))	
 	}}
+	mutex.Unlock()
+	
 	} else {
 	fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
 	}
@@ -327,7 +332,9 @@ func client(conn net.Conn){
 	} else if ((strings.Compare(part[0],"delete"))==0) {
 	////fmt.Print("\nDELETE")
 	if(len(part)==2 && len(part[1])<=256){
-        //mutex.Lock()
+	
+	
+        mutex.Lock()
         err = db.Delete([]byte(string(part[1])), nil)
 	if(err != nil) {
 	fmt.Fprintf(conn,"ERR_FILE_NOT_FOUND\r\n")
@@ -337,9 +344,7 @@ func client(conn net.Conn){
         db_exp_sec.Delete([]byte(string(part[1])), nil)
 	fmt.Fprintf(conn,"OK\r\n")
 	}
-        //mutex.Unlock()
-        
-        
+        mutex.Unlock()
         
 	} else {
 	fmt.Fprintf(conn,"ERR_CMD_ERR\r\n")
@@ -358,5 +363,4 @@ func main(){
         defer db_exp_sec.Close()
 	serverMain()
 }
-
 
