@@ -57,4 +57,11 @@ $obj = Invoke-ComputeBladeApiComputeBladesGet $false $null $null $null "Serial e
 $bios_policy =  New-BiosPolicy  -Name SampleBIOSpolicy
 Invoke-BiosPolicyApiBiosPoliciesPost $bios_policy
 ```
+4. Help
+
+- Seach for help
+```powershell
+- Get-Help <cmdlet> -Detailed
+- Get-Help <cmdlet> -Full
+```
 
